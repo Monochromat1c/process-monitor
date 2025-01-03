@@ -21,13 +21,16 @@ class ProcessWidget(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        # Add these lines after super().__init__()
+        # Window configuration
         self.overrideredirect(True)  # Remove window decorations
-        self.attributes('-topmost', True)  # Keep window on top
         self.wm_attributes('-toolwindow', True)  # Hide from taskbar
         
-        # Add right-click menu for minimize/exit
-        self.bind('<Button-3>', self.show_context_menu)  # Right click
+        # Add mouse events for window dragging
+        self.bind('<Button-1>', self.start_move)
+        self.bind('<B1-Motion>', self.do_move)
+        
+        # Add right-click menu
+        self.bind('<Button-3>', self.show_context_menu)
         
         # Define settings file path in user's AppData folder
         self.settings_file = os.path.join(os.getenv('APPDATA'), 'ProcessMonitor', 'settings.json')
@@ -728,6 +731,21 @@ class ProcessWidget(tk.Tk):
         menu.add_separator()
         menu.add_command(label="Exit", command=self.on_closing)
         menu.tk_popup(event.x_root, event.y_root)
+
+    def start_move(self, event):
+        """Start window drag"""
+        if not self.position_locked.get():  # Only allow moving if position is not locked
+            self.x = event.x
+            self.y = event.y
+
+    def do_move(self, event):
+        """Handle window drag"""
+        if not self.position_locked.get():  # Only allow moving if position is not locked
+            deltax = event.x - self.x
+            deltay = event.y - self.y
+            x = self.winfo_x() + deltax
+            y = self.winfo_y() + deltay
+            self.geometry(f"+{x}+{y}")
 
 if __name__ == "__main__":
     app = ProcessWidget()
