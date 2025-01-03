@@ -15,11 +15,20 @@ import sys
 import winreg
 import win32com.client
 from pathlib import Path
+import pystray
 
 class ProcessWidget(tk.Tk):
     def __init__(self):
         super().__init__()
-
+        
+        # Add these lines after super().__init__()
+        self.overrideredirect(True)  # Remove window decorations
+        self.attributes('-topmost', True)  # Keep window on top
+        self.wm_attributes('-toolwindow', True)  # Hide from taskbar
+        
+        # Add right-click menu for minimize/exit
+        self.bind('<Button-3>', self.show_context_menu)  # Right click
+        
         # Define settings file path in user's AppData folder
         self.settings_file = os.path.join(os.getenv('APPDATA'), 'ProcessMonitor', 'settings.json')
         
@@ -626,17 +635,8 @@ class ProcessWidget(tk.Tk):
             try:
                 shell = win32com.client.Dispatch("WScript.Shell")
                 shortcut = shell.CreateShortCut(str(startup_path))
-                
-                # Get the path to the executable when running as exe
-                if getattr(sys, 'frozen', False):
-                    # Running as exe
-                    app_path = sys.executable
-                else:
-                    # Running as script
-                    app_path = sys.argv[0]
-                    
-                shortcut.TargetPath = app_path
-                shortcut.WorkingDirectory = os.path.dirname(app_path)
+                shortcut.TargetPath = sys.executable
+                shortcut.WorkingDirectory = os.path.dirname(sys.executable)
                 shortcut.save()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to enable startup: {e}")
@@ -685,6 +685,49 @@ class ProcessWidget(tk.Tk):
                 self.options_window.destroy()
             
             messagebox.showinfo("Settings Reset", "All settings have been reset to default.")
+
+    def minimize_window(self):
+        """Minimize the window"""
+        self.withdraw()  # Hide the window
+        
+        # Create system tray icon
+        self.create_tray_icon()
+
+    def create_tray_icon(self):
+        """Create system tray icon"""
+        # Create a simple icon (you can replace this with your app icon)
+        icon_image = Image.open("app_icon.ico")
+        
+        # Create menu
+        menu = (
+            pystray.MenuItem("Show", self.show_window),
+            pystray.MenuItem("Exit", self.on_closing)
+        )
+        
+        # Create tray icon
+        self.tray_icon = pystray.Icon(
+            "ProcessMonitor",
+            icon_image,
+            "Process Monitor",
+            menu
+        )
+        
+        # Run the tray icon in a separate thread
+        self.tray_icon.run()
+
+    def show_window(self):
+        """Show the window and remove tray icon"""
+        if hasattr(self, 'tray_icon'):
+            self.tray_icon.stop()
+        self.deiconify()
+
+    def show_context_menu(self, event):
+        """Show context menu on right click"""
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Minimize", command=self.minimize_window)
+        menu.add_separator()
+        menu.add_command(label="Exit", command=self.on_closing)
+        menu.tk_popup(event.x_root, event.y_root)
 
 if __name__ == "__main__":
     app = ProcessWidget()
