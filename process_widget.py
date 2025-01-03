@@ -11,6 +11,10 @@ from PIL import Image, ImageTk
 import os
 import win32ui
 import json
+import sys
+import winreg
+import win32com.client
+from pathlib import Path
 
 class ProcessWidget(tk.Tk):
     def __init__(self):
@@ -25,6 +29,7 @@ class ProcessWidget(tk.Tk):
         # Initialize default settings
         self.position_locked = tk.BooleanVar(value=False)
         self.transparency_var = tk.DoubleVar(value=1.0)
+        self.startup_enabled = tk.BooleanVar(value=False)
         self.last_position = None
         
         # Load saved settings
@@ -435,7 +440,7 @@ class ProcessWidget(tk.Tk):
         """Update window transparency and save settings"""
         alpha = self.transparency_var.get()
         self.attributes('-alpha', alpha)
-        self.save_settings()  # Save when transparency changes
+        self.save_settings()  # Save settings after changing transparency
 
     def show_options_modal(self):
         """Show the options modal window"""
@@ -471,10 +476,11 @@ class ProcessWidget(tk.Tk):
                                           length=200)
         self.transparency_slider.pack(pady=(0, 20))
         
-        # Add separator
-        ttk.Separator(options_frame, orient='horizontal').pack(fill='x', pady=10)
+        # First separator (after opacity)
+        separator1 = ttk.Separator(options_frame, orient='horizontal')
+        separator1.pack(fill='x', pady=10)
         
-        # Add position lock checkbox
+        # Position lock checkbox
         self.position_lock = ttk.Checkbutton(
             options_frame,
             text="Lock Window Position",
@@ -482,20 +488,51 @@ class ProcessWidget(tk.Tk):
             style="Main.TCheckbutton",
             command=self.toggle_position_lock
         )
-        self.position_lock.pack(pady=(0, 20))
+        self.position_lock.pack(pady=5)
         
-        # Add tooltip for transparency slider
-        self.create_tooltip(self.transparency_slider, "Adjust window transparency")
-        self.create_tooltip(self.position_lock, "Lock the window position on screen")
+        # Second separator
+        separator2 = ttk.Separator(options_frame, orient='horizontal')
+        separator2.pack(fill='x', pady=10)
+        
+        # Start on startup checkbox
+        startup_check = ttk.Checkbutton(
+            options_frame,
+            text="Start on System Startup",
+            variable=self.startup_enabled,
+            style="Main.TCheckbutton",
+            command=self.toggle_startup
+        )
+        startup_check.pack(pady=5)
+        
+        # Third separator
+        separator3 = ttk.Separator(options_frame, orient='horizontal')
+        separator3.pack(fill='x', pady=10)
+        
+        # Reset settings button
+        reset_button = ttk.Button(
+            options_frame,
+            text="Reset All Settings",
+            style="Custom.TButton",
+            command=self.reset_settings
+        )
+        reset_button.pack(pady=5)
         
         # Close button
-        close_button = ttk.Button(options_frame, text="Close",
-                               command=self.options_window.destroy,
-                               style="Custom.TButton")
-        close_button.pack()
+        close_button = ttk.Button(
+            options_frame,
+            text="Save",
+            command=self.options_window.destroy,
+            style="Custom.TButton"
+        )
+        close_button.pack(pady=10)
 
-        # Make window non-resizable
-        self.options_window.resizable(False, False)
+        # Adjust window size for new elements
+        self.options_window.geometry("300x400")
+        
+        # Center the options window
+        x = self.winfo_x() + (self.winfo_width() // 2) - (300 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (400 // 2)
+        self.options_window.geometry(f"+{x}+{y}")
 
     def toggle_position_lock(self):
         """Handle position lock toggle"""
@@ -505,7 +542,7 @@ class ProcessWidget(tk.Tk):
         else:
             # Clear stored position when unlocking
             self.last_position = None
-        self.save_settings()
+        self.save_settings()  # Save settings after toggling
 
     def on_window_configure(self, event):
         """Handle window movement and save settings"""
@@ -521,6 +558,7 @@ class ProcessWidget(tk.Tk):
         settings = {
             'position_locked': self.position_locked.get(),
             'transparency': self.transparency_var.get(),
+            'startup_enabled': self.startup_enabled.get(),
             'window_position': {
                 'x': self.winfo_x(),
                 'y': self.winfo_y()
@@ -542,8 +580,9 @@ class ProcessWidget(tk.Tk):
                 
                 # Apply loaded settings
                 self.position_locked.set(settings.get('position_locked', False))
+                self.startup_enabled.set(settings.get('startup_enabled', False))
                 
-                # Load and apply transparency
+                # Load and apply transparency immediately
                 transparency = settings.get('transparency', 1.0)
                 self.transparency_var.set(transparency)
                 self.attributes('-alpha', transparency)
@@ -554,13 +593,89 @@ class ProcessWidget(tk.Tk):
                         settings['window_position']['x'],
                         settings['window_position']['y']
                     )
-                    # Wait for window to be ready before setting position
+                    # Use after to ensure window is ready
                     self.after(100, lambda: self.geometry(
                         f"+{self.last_position[0]}+{self.last_position[1]}"
                     ))
                 
+                # Check startup status
+                self.check_startup_status()
+                
         except Exception as e:
             print(f"Error loading settings: {e}")
+
+    def check_startup_status(self):
+        """Check if app is set to run on startup"""
+        startup_path = self.get_startup_path()
+        self.startup_enabled.set(startup_path.exists())
+
+    def get_startup_path(self):
+        """Get path to startup shortcut"""
+        startup_folder = os.path.join(
+            os.getenv('APPDATA'),
+            'Microsoft\\Windows\\Start Menu\\Programs\\Startup'
+        )
+        return Path(startup_folder) / "ProcessMonitor.lnk"
+
+    def toggle_startup(self):
+        """Toggle startup status"""
+        startup_path = self.get_startup_path()
+        
+        if self.startup_enabled.get():
+            # Create shortcut
+            try:
+                shell = win32com.client.Dispatch("WScript.Shell")
+                shortcut = shell.CreateShortCut(str(startup_path))
+                shortcut.TargetPath = sys.executable
+                shortcut.WorkingDirectory = os.path.dirname(sys.executable)
+                shortcut.save()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to enable startup: {e}")
+                self.startup_enabled.set(False)
+        else:
+            # Remove shortcut
+            try:
+                if startup_path.exists():
+                    startup_path.unlink()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to disable startup: {e}")
+                self.startup_enabled.set(True)
+        
+        self.save_settings()
+
+    def reset_settings(self):
+        """Reset all settings to default"""
+        if messagebox.askyesno("Reset Settings", 
+                              "Are you sure you want to reset all settings to default?"):
+            # Reset variables
+            self.position_locked.set(False)
+            self.transparency_var.set(1.0)
+            self.startup_enabled.set(False)
+            self.last_position = None
+            
+            # Apply changes
+            self.attributes('-alpha', 1.0)
+            
+            # Remove startup shortcut if exists
+            startup_path = self.get_startup_path()
+            if startup_path.exists():
+                try:
+                    startup_path.unlink()
+                except Exception:
+                    pass
+            
+            # Delete settings file
+            try:
+                if os.path.exists(self.settings_file):
+                    os.remove(self.settings_file)
+            except Exception:
+                pass
+            
+            # Close options window
+            if hasattr(self, 'options_window'):
+                self.options_window.destroy()
+            
+            messagebox.showinfo("Settings Reset", "All settings have been reset to default.")
 
 if __name__ == "__main__":
     app = ProcessWidget()
