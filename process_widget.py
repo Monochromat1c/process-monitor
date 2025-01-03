@@ -10,14 +10,25 @@ import win32process
 from PIL import Image, ImageTk
 import os
 import win32ui
+import json
 
 class ProcessWidget(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        # Add this near the start of __init__, after super().__init__()
+        # Define settings file path in user's AppData folder
+        self.settings_file = os.path.join(os.getenv('APPDATA'), 'ProcessMonitor', 'settings.json')
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
+        
+        # Initialize default settings
         self.position_locked = tk.BooleanVar(value=False)
+        self.transparency_var = tk.DoubleVar(value=1.0)
         self.last_position = None
+        
+        # Load saved settings
+        self.load_settings()
 
         # Configure the window
         self.title("Process Monitor")
@@ -133,9 +144,6 @@ class ProcessWidget(tk.Tk):
                                             style="Custom.TButton")
         self.more_options_button.pack(side=tk.LEFT, padx=5)
 
-        # Initialize opacity variable
-        self.transparency_var = tk.DoubleVar(value=1.0)
-
         # Configure style for label
         style.configure("Main.TLabel",
                         background='#537154',
@@ -155,6 +163,9 @@ class ProcessWidget(tk.Tk):
 
         # Add this near the end of __init__
         self.bind('<Configure>', self.on_window_configure)
+
+        # Bind settings save on window close
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def create_tooltips(self):
         """Create tooltips for buttons"""
@@ -414,16 +425,17 @@ class ProcessWidget(tk.Tk):
                 tk.messagebox.showerror("Error", "Access denied to terminate this process")
 
     def on_closing(self):
-        """Clean up when closing the window"""
+        """Save settings before closing"""
+        self.save_settings()
         self.running = False
-        # Clear icon cache
         self.icon_cache.clear()
         self.destroy()
 
     def update_transparency(self, *args):
-        """Update window transparency"""
+        """Update window transparency and save settings"""
         alpha = self.transparency_var.get()
         self.attributes('-alpha', alpha)
+        self.save_settings()  # Save when transparency changes
 
     def show_options_modal(self):
         """Show the options modal window"""
@@ -463,17 +475,18 @@ class ProcessWidget(tk.Tk):
         ttk.Separator(options_frame, orient='horizontal').pack(fill='x', pady=10)
         
         # Add position lock checkbox
-        position_lock = ttk.Checkbutton(
+        self.position_lock = ttk.Checkbutton(
             options_frame,
             text="Lock Window Position",
             variable=self.position_locked,
-            style="Main.TCheckbutton"
+            style="Main.TCheckbutton",
+            command=self.toggle_position_lock
         )
-        position_lock.pack(pady=(0, 20))
+        self.position_lock.pack(pady=(0, 20))
         
         # Add tooltip for transparency slider
         self.create_tooltip(self.transparency_slider, "Adjust window transparency")
-        self.create_tooltip(position_lock, "Lock the window position on screen")
+        self.create_tooltip(self.position_lock, "Lock the window position on screen")
         
         # Close button
         close_button = ttk.Button(options_frame, text="Close",
@@ -484,13 +497,70 @@ class ProcessWidget(tk.Tk):
         # Make window non-resizable
         self.options_window.resizable(False, False)
 
+    def toggle_position_lock(self):
+        """Handle position lock toggle"""
+        if self.position_locked.get():
+            # Update position when locking
+            self.last_position = (self.winfo_x(), self.winfo_y())
+        else:
+            # Clear stored position when unlocking
+            self.last_position = None
+        self.save_settings()
+
     def on_window_configure(self, event):
-        """Handle window movement"""
+        """Handle window movement and save settings"""
         if self.position_locked.get() and event.widget == self:
             if hasattr(self, 'last_position') and self.last_position:
                 self.geometry(f"+{self.last_position[0]}+{self.last_position[1]}")
             else:
                 self.last_position = (self.winfo_x(), self.winfo_y())
+                self.save_settings()  # Save when position is locked
+
+    def save_settings(self):
+        """Save current settings to file"""
+        settings = {
+            'position_locked': self.position_locked.get(),
+            'transparency': self.transparency_var.get(),
+            'window_position': {
+                'x': self.winfo_x(),
+                'y': self.winfo_y()
+            } if self.position_locked.get() else None
+        }
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings, f)
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+
+    def load_settings(self):
+        """Load settings from file"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r') as f:
+                    settings = json.load(f)
+                
+                # Apply loaded settings
+                self.position_locked.set(settings.get('position_locked', False))
+                
+                # Load and apply transparency
+                transparency = settings.get('transparency', 1.0)
+                self.transparency_var.set(transparency)
+                self.attributes('-alpha', transparency)
+                
+                # Restore window position if it was locked
+                if settings.get('window_position') and settings.get('position_locked'):
+                    self.last_position = (
+                        settings['window_position']['x'],
+                        settings['window_position']['y']
+                    )
+                    # Wait for window to be ready before setting position
+                    self.after(100, lambda: self.geometry(
+                        f"+{self.last_position[0]}+{self.last_position[1]}"
+                    ))
+                
+        except Exception as e:
+            print(f"Error loading settings: {e}")
 
 if __name__ == "__main__":
     app = ProcessWidget()
