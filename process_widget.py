@@ -626,8 +626,17 @@ class ProcessWidget(tk.Tk):
             try:
                 shell = win32com.client.Dispatch("WScript.Shell")
                 shortcut = shell.CreateShortCut(str(startup_path))
-                shortcut.TargetPath = sys.executable
-                shortcut.WorkingDirectory = os.path.dirname(sys.executable)
+                
+                # Get the path to the executable when running as exe
+                if getattr(sys, 'frozen', False):
+                    # Running as exe
+                    app_path = sys.executable
+                else:
+                    # Running as script
+                    app_path = sys.argv[0]
+                    
+                shortcut.TargetPath = app_path
+                shortcut.WorkingDirectory = os.path.dirname(app_path)
                 shortcut.save()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to enable startup: {e}")
