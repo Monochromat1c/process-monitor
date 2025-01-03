@@ -96,9 +96,13 @@ class ProcessWidget(tk.Tk):
         # Store current processes
         self.current_processes = set()
         
-        # Create button frame with background
-        self.button_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
-        self.button_frame.grid(row=1, column=0, columnspan=2, pady=5)
+        # Create button and slider frame
+        self.control_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
+        self.control_frame.grid(row=1, column=0, columnspan=2, pady=5)
+
+        # Button frame for existing buttons
+        self.button_frame = ttk.Frame(self.control_frame, style="Main.TFrame")
+        self.button_frame.pack(side=tk.LEFT, padx=(0, 10))
 
         # End Process button with custom style
         self.end_button = ttk.Button(self.button_frame, text="End Process",
@@ -112,6 +116,30 @@ class ProcessWidget(tk.Tk):
                                        style="Custom.TButton")
         self.refresh_button.pack(side=tk.LEFT, padx=5)
 
+        # Transparency control frame
+        self.transparency_frame = ttk.Frame(self.control_frame, style="Main.TFrame")
+        self.transparency_frame.pack(side=tk.LEFT)
+
+        # Transparency label
+        self.transparency_label = ttk.Label(self.transparency_frame, text="Opacity:",
+                                          style="Main.TLabel")
+        self.transparency_label.pack(side=tk.LEFT, padx=(0, 5))
+
+        # Transparency slider
+        self.transparency_var = tk.DoubleVar(value=1.0)
+        self.transparency_slider = ttk.Scale(self.transparency_frame,
+                                           from_=0.1, to=1.0,
+                                           orient=tk.HORIZONTAL,
+                                           variable=self.transparency_var,
+                                           command=self.update_transparency,
+                                           length=100)
+        self.transparency_slider.pack(side=tk.LEFT)
+
+        # Configure style for label
+        style.configure("Main.TLabel",
+                       background='#f0f0f0',
+                       font=('Segoe UI', 9))
+
         # Add hover tooltips
         self.create_tooltips()
 
@@ -121,12 +149,13 @@ class ProcessWidget(tk.Tk):
         self.start_process_monitor()
 
         # Configure minimum window size to prevent columns from disappearing
-        self.minsize(425, 400)  # Set minimum window size
+        self.minsize(525, 400)  # Increased width for transparency controls
 
     def create_tooltips(self):
         """Create tooltips for buttons"""
         self.create_tooltip(self.end_button, "Terminate the selected process")
         self.create_tooltip(self.refresh_button, "Manually refresh the process list")
+        self.create_tooltip(self.transparency_slider, "Adjust window transparency")
 
     def create_tooltip(self, widget, text):
         """Create a tooltip for a given widget"""
@@ -252,26 +281,35 @@ class ProcessWidget(tk.Tk):
     def get_default_icon(self, process_name):
         """Create a default icon based on process type"""
         try:
-            # Common Windows system processes
-            if process_name.lower() in ['svchost.exe', 'services.exe', 'lsass.exe']:
-                ico_path = os.path.join(os.environ['SystemRoot'], 'System32', 'imageres.dll')
-                idx = 0  # System process icon index
-            
-            # Background services
+            # Define paths
+            system32 = os.path.join(os.environ['SystemRoot'], 'System32')
+            shell32 = os.path.join(system32, 'shell32.dll')
+            imageres = os.path.join(system32, 'imageres.dll')
+
+            # Map process names to specific icons
+            process_icons = {
+                'taskmgr.exe': (imageres, 70),  # Task Manager icon
+                'memcompression': (imageres, 109),  # Memory compression icon
+                'searchhost.exe': (shell32, 23),  # Search icon
+                'amdrssrv.exe': (shell32, 15),  # Service icon
+                'dock_64.exe': (shell32, 44),  # Application icon
+                'textinputhost.exe': (shell32, 16),  # Text input icon
+                'explorer.exe': (shell32, 3),  # Explorer icon
+                'svchost.exe': (imageres, 0),  # System process icon
+                'services.exe': (imageres, 0),
+                'lsass.exe': (imageres, 0),
+            }
+
+            # Get icon path and index for known processes
+            if process_name.lower() in process_icons:
+                ico_path, idx = process_icons[process_name.lower()]
+            # Default icons for different types of processes
             elif process_name.lower().endswith('svc.exe') or process_name.lower().endswith('service.exe'):
-                ico_path = os.path.join(os.environ['SystemRoot'], 'System32', 'shell32.dll')
-                idx = 57  # Service icon index
-            
-            # Console applications
+                ico_path, idx = shell32, 57  # Service icon
             elif process_name.lower().endswith('.exe'):
-                ico_path = os.path.join(os.environ['SystemRoot'], 'System32', 'shell32.dll')
-                idx = 3  # Application icon index
-            
+                ico_path, idx = shell32, 2  # Generic application icon
             else:
-                # Create generic application icon
-                img = Image.new('RGBA', (20, 20), (200, 200, 200, 255))
-                photo = ImageTk.PhotoImage(img)
-                return photo
+                ico_path, idx = shell32, 1  # Generic file icon
 
             # Extract icon from system files
             large, small = win32gui.ExtractIconEx(ico_path, idx)
@@ -315,7 +353,7 @@ class ProcessWidget(tk.Tk):
                 photo = ImageTk.PhotoImage(img)
                 return photo
 
-        except:
+        except Exception as e:
             # Fallback to basic icon
             img = Image.new('RGBA', (20, 20), (200, 200, 200, 255))
             photo = ImageTk.PhotoImage(img)
@@ -376,6 +414,11 @@ class ProcessWidget(tk.Tk):
         # Clear icon cache
         self.icon_cache.clear()
         self.destroy()
+
+    def update_transparency(self, *args):
+        """Update window transparency"""
+        alpha = self.transparency_var.get()
+        self.attributes('-alpha', alpha)
 
 if __name__ == "__main__":
     app = ProcessWidget()
