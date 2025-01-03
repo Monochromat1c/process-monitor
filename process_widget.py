@@ -15,130 +15,132 @@ class ProcessWidget(tk.Tk):
     def __init__(self):
         super().__init__()
 
+        # Add this near the start of __init__, after super().__init__()
+        self.position_locked = tk.BooleanVar(value=False)
+        self.last_position = None
+
         # Configure the window
         self.title("Process Monitor")
         self.resizable(False, False)
-        self.configure(bg='#f0f0f0')  # Light gray background
-        
-        # Center the window but align title to left
-        self.option_add('*Dialog.msg.justify', 'left')
-        self.option_add('*Dialog.msg.anchor', 'w')
+        self.configure(bg='#537154')  # Dark green background
 
         # Style configuration
         style = ttk.Style()
-        style.theme_use('clam')  # Use clam theme for modern look
-        
+        style.theme_use('clam')
+
         # Configure Treeview style
         style.configure("Treeview",
-                       background="#ffffff",
-                       fieldbackground="#ffffff",
-                       foreground="#333333",
-                       font=('Segoe UI', 9),
-                       rowheight=25)
-        
+                        background="#c5e4cf",
+                        fieldbackground="#3b4d3b",
+                        foreground="#1a3a1a",
+                        font=('Segoe UI', 9),
+                        rowheight=25)
+
         style.configure("Treeview.Heading",
-                       background="#e1e1e1",
-                       foreground="#333333",
-                       font=('Segoe UI', 10, 'bold'),
-                       relief="flat")
-        
+                        background="#4a5c4a",
+                        foreground="#ffffff",
+                        font=('Segoe UI', 10, 'bold'),
+                        relief="flat")
+
         style.map("Treeview.Heading",
-                 background=[('active', '#d1d1d1')])
-        
+                  background=[('active', '#5a6c5a')])
+
         # Configure Button style
         style.configure("Custom.TButton",
-                       background="#4a90e2",
-                       foreground="#ffffff",
-                       padding=(15, 5),
-                       font=('Segoe UI', 9))
-        
+                        background="#6b8e23",
+                        foreground="#ffffff",
+                        padding=(10, 5),
+                        font=('Segoe UI', 9))
+
         style.map("Custom.TButton",
-                 background=[('active', '#357abd')],
-                 relief=[('pressed', 'sunken')])
+                  background=[('active', '#556b2f')],
+                  relief=[('pressed', 'sunken')])
+
+        # Configure Checkbutton style
+        style.configure("Main.TCheckbutton",
+                       background='#537154',
+                       foreground="#ffffff")
+
+        style.map("Main.TCheckbutton",
+                 background=[('active', '#537154')],
+                 foreground=[('active', '#ffffff')])
 
         # Create main frame with padding and background
         self.main_frame = ttk.Frame(self, padding="10", style="Main.TFrame")
-        style.configure("Main.TFrame", background='#f0f0f0')
-        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.main_frame.grid(row=0, column=0, sticky="")
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        style.configure("Main.TFrame", background='#537154')
 
         # Store icons cache
         self.icon_cache = {}
 
         # Create treeview with adjusted height and selection colors
         self.tree = ttk.Treeview(self.main_frame, columns=('Name', 'PID', 'Memory'), height=15,
-                                selectmode="browse")
+                                 selectmode="browse")
         self.tree.heading('#0', text='')  # Icon column
         self.tree.heading('Name', text='Process Name')
         self.tree.heading('PID', text='PID')
         self.tree.heading('Memory', text='Memory (MB)')
-        
+
         # Configure column widths
-        self.tree.column('#0', width=45, stretch=False)  # Increased padding for icons
+        self.tree.column('#0', width=45, stretch=False)
         self.tree.column('Name', width=200, stretch=True)
         self.tree.column('PID', width=80, stretch=False)
         self.tree.column('Memory', width=100, stretch=False)
-        
+
         self.tree.grid(row=0, column=0, columnspan=2, padx=2, pady=(0, 10))
 
         # Style the scrollbar
         style.configure("Custom.Vertical.TScrollbar",
-                       background="#4a90e2",
-                       arrowcolor="#ffffff",
-                       troughcolor="#f0f0f0")
+                        background="#6b8e23",
+                        arrowcolor="#ffffff",
+                        troughcolor="#537154")
 
         # Add scrollbar with custom style
         scrollbar = ttk.Scrollbar(self.main_frame, orient=tk.VERTICAL,
-                                command=self.tree.yview,
-                                style="Custom.Vertical.TScrollbar")
+                                  command=self.tree.yview,
+                                  style="Custom.Vertical.TScrollbar")
         scrollbar.grid(row=0, column=2, sticky=(tk.N, tk.S), padx=(0, 2))
         self.tree.configure(yscrollcommand=scrollbar.set)
 
         # Store current processes
         self.current_processes = set()
-        
+
         # Create button and slider frame
         self.control_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
         self.control_frame.grid(row=1, column=0, columnspan=2, pady=5)
 
         # Button frame for existing buttons
         self.button_frame = ttk.Frame(self.control_frame, style="Main.TFrame")
-        self.button_frame.pack(side=tk.LEFT, padx=(0, 10))
+        self.button_frame.pack(side=tk.LEFT)
 
         # End Process button with custom style
         self.end_button = ttk.Button(self.button_frame, text="End Process",
-                                   command=self.end_process,
-                                   style="Custom.TButton")
+                                     command=self.end_process,
+                                     style="Custom.TButton")
         self.end_button.pack(side=tk.LEFT, padx=5)
 
         # Refresh button with custom style
         self.refresh_button = ttk.Button(self.button_frame, text="Refresh",
-                                       command=self.refresh_processes,
-                                       style="Custom.TButton")
+                                         command=self.refresh_processes,
+                                         style="Custom.TButton")
         self.refresh_button.pack(side=tk.LEFT, padx=5)
 
-        # Transparency control frame
-        self.transparency_frame = ttk.Frame(self.control_frame, style="Main.TFrame")
-        self.transparency_frame.pack(side=tk.LEFT)
+        # More Options button
+        self.more_options_button = ttk.Button(self.button_frame, text="More Options",
+                                            command=self.show_options_modal,
+                                            style="Custom.TButton")
+        self.more_options_button.pack(side=tk.LEFT, padx=5)
 
-        # Transparency label
-        self.transparency_label = ttk.Label(self.transparency_frame, text="Opacity:",
-                                          style="Main.TLabel")
-        self.transparency_label.pack(side=tk.LEFT, padx=(0, 5))
-
-        # Transparency slider
+        # Initialize opacity variable
         self.transparency_var = tk.DoubleVar(value=1.0)
-        self.transparency_slider = ttk.Scale(self.transparency_frame,
-                                           from_=0.1, to=1.0,
-                                           orient=tk.HORIZONTAL,
-                                           variable=self.transparency_var,
-                                           command=self.update_transparency,
-                                           length=100)
-        self.transparency_slider.pack(side=tk.LEFT)
 
         # Configure style for label
         style.configure("Main.TLabel",
-                       background='#f0f0f0',
-                       font=('Segoe UI', 9))
+                        background='#537154',
+                        foreground="#e0e0e0",
+                        font=('Segoe UI', 9))
 
         # Add hover tooltips
         self.create_tooltips()
@@ -149,13 +151,16 @@ class ProcessWidget(tk.Tk):
         self.start_process_monitor()
 
         # Configure minimum window size to prevent columns from disappearing
-        self.minsize(525, 400)  # Increased width for transparency controls
+        self.minsize(525, 400)
+
+        # Add this near the end of __init__
+        self.bind('<Configure>', self.on_window_configure)
 
     def create_tooltips(self):
         """Create tooltips for buttons"""
         self.create_tooltip(self.end_button, "Terminate the selected process")
         self.create_tooltip(self.refresh_button, "Manually refresh the process list")
-        self.create_tooltip(self.transparency_slider, "Adjust window transparency")
+        self.create_tooltip(self.more_options_button, "Show additional settings")
 
     def create_tooltip(self, widget, text):
         """Create a tooltip for a given widget"""
@@ -163,15 +168,15 @@ class ProcessWidget(tk.Tk):
             x, y, _, _ = widget.bbox("insert")
             x += widget.winfo_rootx() + 25
             y += widget.winfo_rooty() + 20
-            
+
             # Create a toplevel window
             self.tooltip = tk.Toplevel(widget)
             self.tooltip.wm_overrideredirect(True)
             self.tooltip.wm_geometry(f"+{x}+{y}")
-            
+
             label = tk.Label(self.tooltip, text=text, justify=tk.LEFT,
-                           background="#ffffe0", relief="solid", borderwidth=1,
-                           font=("Segoe UI", "8", "normal"))
+                             background="#ffffe0", relief="solid", borderwidth=1,
+                             font=("Segoe UI", "8", "normal"))
             label.pack()
 
         def leave(event):
@@ -199,14 +204,14 @@ class ProcessWidget(tk.Tk):
             try:
                 # Get current set of processes
                 new_processes = set(proc.pid for proc in psutil.process_iter())
-                
+
                 # Check if there are any changes
                 if new_processes != self.current_processes:
                     # Update the process list
                     self.current_processes = new_processes
                     # Schedule the update in the main thread
                     self.after(0, self.single_scan)
-                
+
                 # Sleep for a short time before next check
                 time.sleep(1)
             except:
@@ -236,7 +241,7 @@ class ProcessWidget(tk.Tk):
                 return self.get_default_icon(process_name)
 
             icon_handle = large[0]  # Use large icon instead of small
-            
+
             # Get system metrics for large icons
             ico_x = win32api.GetSystemMetrics(win32con.SM_CXICON)
             ico_y = win32api.GetSystemMetrics(win32con.SM_CYICON)
@@ -251,12 +256,12 @@ class ProcessWidget(tk.Tk):
 
             bmpstr = hbmp.GetBitmapBits(True)
             img = Image.frombuffer(
-                'RGBA', 
+                'RGBA',
                 (ico_x, ico_y),
-                bmpstr, 
-                'raw', 
-                'BGRA', 
-                0, 
+                bmpstr,
+                'raw',
+                'BGRA',
+                0,
                 1
             )
 
@@ -315,7 +320,7 @@ class ProcessWidget(tk.Tk):
             large, small = win32gui.ExtractIconEx(ico_path, idx)
             if large:
                 icon_handle = large[0]
-                
+
                 # Get system metrics for large icons
                 ico_x = win32api.GetSystemMetrics(win32con.SM_CXICON)
                 ico_y = win32api.GetSystemMetrics(win32con.SM_CYICON)
@@ -330,12 +335,12 @@ class ProcessWidget(tk.Tk):
 
                 bmpstr = hbmp.GetBitmapBits(True)
                 img = Image.frombuffer(
-                    'RGBA', 
+                    'RGBA',
                     (ico_x, ico_y),
-                    bmpstr, 
-                    'raw', 
-                    'BGRA', 
-                    0, 
+                    bmpstr,
+                    'raw',
+                    'BGRA',
+                    0,
                     1
                 )
 
@@ -419,6 +424,73 @@ class ProcessWidget(tk.Tk):
         """Update window transparency"""
         alpha = self.transparency_var.get()
         self.attributes('-alpha', alpha)
+
+    def show_options_modal(self):
+        """Show the options modal window"""
+        # Create modal window
+        self.options_window = tk.Toplevel(self)
+        self.options_window.title("Options")
+        self.options_window.configure(bg='#537154')
+        
+        # Make it modal
+        self.options_window.transient(self)
+        self.options_window.grab_set()
+        
+        # Calculate position to center the window
+        x = self.winfo_x() + (self.winfo_width() // 2) - (300 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (200 // 2)  # Increased height for new option
+        self.options_window.geometry(f"300x200+{x}+{y}")
+        
+        # Create main frame
+        options_frame = ttk.Frame(self.options_window, style="Main.TFrame", padding="20")
+        options_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Opacity control
+        opacity_label = ttk.Label(options_frame, text="Window Opacity:",
+                                style="Main.TLabel")
+        opacity_label.pack(pady=(0, 5))
+        
+        # Transparency slider
+        self.transparency_slider = ttk.Scale(options_frame,
+                                          from_=0.1, to=1.0,
+                                          orient=tk.HORIZONTAL,
+                                          variable=self.transparency_var,
+                                          command=self.update_transparency,
+                                          length=200)
+        self.transparency_slider.pack(pady=(0, 20))
+        
+        # Add separator
+        ttk.Separator(options_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Add position lock checkbox
+        position_lock = ttk.Checkbutton(
+            options_frame,
+            text="Lock Window Position",
+            variable=self.position_locked,
+            style="Main.TCheckbutton"
+        )
+        position_lock.pack(pady=(0, 20))
+        
+        # Add tooltip for transparency slider
+        self.create_tooltip(self.transparency_slider, "Adjust window transparency")
+        self.create_tooltip(position_lock, "Lock the window position on screen")
+        
+        # Close button
+        close_button = ttk.Button(options_frame, text="Close",
+                               command=self.options_window.destroy,
+                               style="Custom.TButton")
+        close_button.pack()
+
+        # Make window non-resizable
+        self.options_window.resizable(False, False)
+
+    def on_window_configure(self, event):
+        """Handle window movement"""
+        if self.position_locked.get() and event.widget == self:
+            if hasattr(self, 'last_position') and self.last_position:
+                self.geometry(f"+{self.last_position[0]}+{self.last_position[1]}")
+            else:
+                self.last_position = (self.winfo_x(), self.winfo_y())
 
 if __name__ == "__main__":
     app = ProcessWidget()
