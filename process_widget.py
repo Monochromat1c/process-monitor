@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import psutil
 import threading
 import time
@@ -40,6 +40,9 @@ class ProcessWidget(tk.Tk):
         scrollbar.grid(row=0, column=2, sticky=(tk.N, tk.S))
         self.tree.configure(yscrollcommand=scrollbar.set)
 
+        # Store current processes
+        self.current_processes = set()
+        
         # Create button frame
         self.button_frame = ttk.Frame(self.main_frame)
         self.button_frame.grid(row=1, column=0, columnspan=2, pady=5)
@@ -48,23 +51,49 @@ class ProcessWidget(tk.Tk):
         self.end_button = ttk.Button(self.button_frame, text="End Process", command=self.end_process)
         self.end_button.pack(side=tk.LEFT, padx=5)
 
-        # Replace Pause button with Refresh button
+        # Refresh button
         self.refresh_button = ttk.Button(self.button_frame, text="Refresh", command=self.refresh_processes)
         self.refresh_button.pack(side=tk.LEFT, padx=5)
 
-        # Start update thread with single scan
+        # Start monitoring
         self.running = True
-        self.update_thread = threading.Thread(target=self.single_scan)
-        self.update_thread.daemon = True
-        self.update_thread.start()
+        self.initial_scan()
+        self.start_process_monitor()
 
-    def refresh_processes(self):
-        # Create new thread for each refresh to prevent GUI freezing
-        refresh_thread = threading.Thread(target=self.single_scan)
-        refresh_thread.daemon = True
-        refresh_thread.start()
+    def initial_scan(self):
+        """Perform initial scan of processes"""
+        self.single_scan()
+        # Store current PIDs
+        self.current_processes = set(proc.pid for proc in psutil.process_iter())
+
+    def start_process_monitor(self):
+        """Start the background monitoring thread"""
+        self.monitor_thread = threading.Thread(target=self.monitor_processes)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
+
+    def monitor_processes(self):
+        """Monitor for new processes in the background"""
+        while self.running:
+            try:
+                # Get current set of processes
+                new_processes = set(proc.pid for proc in psutil.process_iter())
+                
+                # Check if there are any changes
+                if new_processes != self.current_processes:
+                    # Update the process list
+                    self.current_processes = new_processes
+                    # Schedule the update in the main thread
+                    self.after(0, self.single_scan)
+                
+                # Sleep for a short time before next check
+                time.sleep(1)
+            except:
+                # Handle any errors silently and continue monitoring
+                pass
 
     def single_scan(self):
+        """Scan and update the process list"""
         # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -86,6 +115,12 @@ class ProcessWidget(tk.Tk):
         for proc in processes:
             self.tree.insert('', 'end', text=proc[0], values=(proc[1], f"{proc[2]:.1f}"))
 
+    def refresh_processes(self):
+        """Manual refresh button handler"""
+        self.single_scan()
+        # Update current processes set
+        self.current_processes = set(proc.pid for proc in psutil.process_iter())
+
     def end_process(self):
         selected_item = self.tree.selection()
         if selected_item:
@@ -98,6 +133,7 @@ class ProcessWidget(tk.Tk):
                 tk.messagebox.showerror("Error", "Access denied to terminate this process")
 
     def on_closing(self):
+        """Clean up when closing the window"""
         self.running = False
         self.destroy()
 
